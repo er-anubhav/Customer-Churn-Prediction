@@ -46,11 +46,15 @@ A telecom company wants to understand the natural groups (segments) its customer
   - **Internet service type** (fiber optic customers churn more)
 
 ## Screenshots
-![Elbow Curve](Images/elbow_curve.png)
-![Cluster Scatter](Images/cluster_scatter.png)
-![Churn by Segment](Images/churn_by_cluster.png)
+![EDA - Feature Distributions](Images/eda_distributions.png)
+![EDA - Churn by Contract and Internet Service](Images/eda_churn_by_category.png)
+![EDA - Correlation Heatmap](Images/eda_correlation_heatmap.png)
+![EDA - Tenure vs Monthly Charges](Images/eda_tenure_vs_monthly.png)
+![Elbow Curve - Optimal k Selection](Images/elbow_curve.png)
+![Cluster Scatter - Tenure vs Monthly Charges](Images/cluster_scatter.png)
+![Churn Rate by Cluster](Images/churn_by_cluster.png)
 ![Confusion Matrix](Images/confusion_matrix.png)
-![Feature Importance](Images/feature_importance.png)
+![Feature Importance - Model Coefficients](Images/feature_importance.png)
 
 ## Future Improvements
 - Try DBSCAN or Gaussian Mixture Models for clustering and compare segment quality
