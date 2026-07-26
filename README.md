@@ -64,4 +64,4 @@ A telecom company wants to understand the natural groups (segments) its customer
 - Collect additional features like support ticket history and payment behavior
 
 ## Author
-CETPA AIML Internship Project | Roll No: 2302221530015
+Roll No: 2302221530015

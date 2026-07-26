@@ -38,20 +38,30 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR  = os.path.join(BASE_DIR, "Models")
 DATA_PATH  = os.path.join(BASE_DIR, "Dataset", "WA_Fn-UseC_-Telco-Customer-Churn.csv")
 
-# ── Load models & data ────────────────────────────────────────────────────────
+# ── Load (or train) models & data ─────────────────────────────────────────────
 @st.cache_resource
 def load_models():
-    return {
-        "churn":  joblib.load(os.path.join(MODEL_DIR, "churn_model.pkl")),
-        "kmeans": joblib.load(os.path.join(MODEL_DIR, "kmeans.pkl")),
-        "scaler": joblib.load(os.path.join(MODEL_DIR, "scaler.pkl")),
-        "meta":   joblib.load(os.path.join(MODEL_DIR, "metadata.pkl")),
+    """Load saved models from disk. If they don't exist, train them from data."""
+    model_paths = {
+        "churn":  os.path.join(MODEL_DIR, "churn_model.pkl"),
+        "kmeans": os.path.join(MODEL_DIR, "kmeans.pkl"),
+        "scaler": os.path.join(MODEL_DIR, "scaler.pkl"),
+        "meta":   os.path.join(MODEL_DIR, "metadata.pkl"),
     }
 
-@st.cache_data
-def load_data():
+    # If all files exist, load and return
+    if all(os.path.exists(p) for p in model_paths.values()):
+        return {k: joblib.load(p) for k, p in model_paths.items()}
+
+    # ── Train from scratch ────────────────────────────────────────────────
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import accuracy_score
+
     df = pd.read_csv(DATA_PATH)
-    # Clean like the notebook
+    # Clean
     df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce").fillna(0)
     service_cols = ["OnlineSecurity","OnlineBackup","DeviceProtection",
                     "TechSupport","StreamingTV","StreamingMovies"]
@@ -59,15 +69,82 @@ def load_data():
         df[c] = df[c].replace("No internet service", "No")
     df["MultipleLines"] = df["MultipleLines"].replace("No phone service", "No")
 
-    # Add cluster labels
+    # --- Clustering ---
+    cluster_feats = ["tenure","MonthlyCharges","TotalCharges"]
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(df[cluster_feats])
+
+    kmeans = KMeans(n_clusters=4, random_state=42, n_init=10)
+    df["Cluster"] = kmeans.fit_predict(X_scaled)
+
+    segment_names = {
+        0: "High-Value Loyal",
+        1: "Low-Engagement New",
+        2: "Premium Short-Term",
+        3: "Mid-Value At-Risk",
+    }
+    df["Segment"] = df["Cluster"].map(segment_names)
+
+    # --- Churn model ---
+
+    # --- Churn model ---
+    cat_cols = ["gender","Partner","Dependents","PhoneService","MultipleLines",
+                "InternetService","OnlineSecurity","OnlineBackup","DeviceProtection",
+                "TechSupport","StreamingTV","StreamingMovies","Contract",
+                "PaperlessBilling","PaymentMethod"]
+    df_model = df.drop(columns=["customerID"])
+    df_model = pd.get_dummies(df_model, columns=cat_cols, drop_first=True)
+
+    # Add segment dummies using segment NAMES (so feature names match the predictor)
+    seg_dummies = pd.get_dummies(df["Segment"], prefix="Segment")
+    seg_dummies = seg_dummies.drop(columns=["Segment_High-Value Loyal"], errors="ignore")
+    df_model = pd.concat([df_model, seg_dummies], axis=1)
+
+    X = df_model.drop(columns=["Churn", "Segment"])
+    y = (df["Churn"] == "Yes").astype(int)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
+
+    logreg = LogisticRegression(max_iter=1000, random_state=42, class_weight="balanced")
+    logreg.fit(X_train, y_train)
+
+    accuracy = accuracy_score(y_test, logreg.predict(X_test))
+
+    # Save for future runs
+    os.makedirs(MODEL_DIR, exist_ok=True)
+    metadata = {
+        "features": list(X.columns),
+        "accuracy": accuracy,
+        "k": 4,
+        "segment_names": segment_names,
+    }
+    joblib.dump(logreg, model_paths["churn"])
+    joblib.dump(kmeans, model_paths["kmeans"])
+    joblib.dump(scaler, model_paths["scaler"])
+    joblib.dump(metadata, model_paths["meta"])
+
+    return {"churn": logreg, "kmeans": kmeans, "scaler": scaler, "meta": metadata}
+
+
+@st.cache_data
+def load_data():
+    df = pd.read_csv(DATA_PATH)
+    df["TotalCharges"] = pd.to_numeric(df["TotalCharges"], errors="coerce").fillna(0)
+    service_cols = ["OnlineSecurity","OnlineBackup","DeviceProtection",
+                    "TechSupport","StreamingTV","StreamingMovies"]
+    for c in service_cols:
+        df[c] = df[c].replace("No internet service", "No")
+    df["MultipleLines"] = df["MultipleLines"].replace("No phone service", "No")
+
+    # Assign cluster labels using the (loaded or just-trained) models
     cluster_feats = ["tenure","MonthlyCharges","TotalCharges"]
     X_cluster = df[cluster_feats].copy()
     X_scaled = models["scaler"].transform(X_cluster)
     df["Cluster"] = models["kmeans"].predict(X_scaled)
     seg_map = models["meta"]["segment_names"]
     df["Segment"] = df["Cluster"].map(seg_map)
-
-    # Encode Churn for prediction
     df["Churn_enc"] = (df["Churn"] == "Yes").astype(int)
     return df
 
