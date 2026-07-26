@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Models (generated from notebook)
+Models/*.pkl
+
+# Streamlit
+.streamlit/
+
+# IDE
+.vscode/
+.idea/
